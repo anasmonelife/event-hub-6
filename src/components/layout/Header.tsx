@@ -1,8 +1,9 @@
 import { Link, useLocation } from "react-router-dom";
-import { Calendar, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import logo from "@/assets/logo.jpg";
 const navItems = [{
   label: "Dashboard",
   href: "/"
@@ -28,10 +29,8 @@ export function Header() {
   return <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-            <Calendar className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold text-foreground">E-life Society Samrambhaka Mela 2025-26</span>
+          <img src={logo} alt="Samrambhaka Mela Logo" className="h-12 w-auto rounded-lg" />
+          <span className="text-lg font-bold text-foreground hidden sm:block">സംരംഭക മേള 2025-26</span>
         </Link>
 
         {/* Desktop Navigation */}
