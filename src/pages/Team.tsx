@@ -14,27 +14,15 @@ import {
   Mail,
   Briefcase,
   Calendar,
-  Trash2
+  Trash2,
+  Loader2
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: string;
-  type: "official" | "volunteer";
-  shift?: string;
-  duties?: string;
-}
-
-const initialTeam: TeamMember[] = [
-  { id: "1", name: "Rajesh Kumar", email: "rajesh@email.com", phone: "9876543210", role: "Event Director", type: "official" },
-  { id: "2", name: "Priya Sharma", email: "priya@email.com", phone: "9876543211", role: "Finance Manager", type: "official" },
-  { id: "3", name: "Amit Singh", email: "amit@email.com", phone: "9876543212", role: "Registration Desk", type: "volunteer", shift: "Morning (8AM-2PM)", duties: "Registration & check-in" },
-  { id: "4", name: "Sneha Patel", email: "sneha@email.com", phone: "9876543213", role: "Food Court Assistant", type: "volunteer", shift: "Evening (2PM-8PM)", duties: "Food stall coordination" },
-];
+type TeamMember = Tables<"team_members">;
 
 const roles = {
   official: ["Event Director", "Finance Manager", "Operations Head", "Marketing Lead", "Logistics Coordinator"],
@@ -44,36 +32,98 @@ const roles = {
 const shifts = ["Morning (8AM-2PM)", "Afternoon (12PM-6PM)", "Evening (2PM-8PM)", "Night (6PM-10PM)"];
 
 export default function Team() {
-  const [team, setTeam] = useState<TeamMember[]>(initialTeam);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState<"official" | "volunteer">("official");
   const [newMember, setNewMember] = useState({
     name: "",
     email: "",
-    phone: "",
-    role: "",
-    shift: "",
-    duties: ""
+    mobile: "",
+    responsibilities: "",
+    shift_details: ""
   });
 
-  const handleAddMember = () => {
-    if (newMember.name && newMember.role) {
-      setTeam([...team, { 
-        ...newMember, 
-        id: Date.now().toString(), 
-        type: formType 
-      }]);
-      setNewMember({ name: "", email: "", phone: "", role: "", shift: "", duties: "" });
+  useEffect(() => {
+    fetchTeamMembers();
+  }, []);
+
+  const fetchTeamMembers = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("team_members")
+      .select("*")
+      .order("created_at", { ascending: false });
+    
+    if (error) {
+      toast.error("Failed to fetch team members");
+      console.error(error);
+    } else {
+      setTeam(data || []);
+    }
+    setLoading(false);
+  };
+
+  const handleAddMember = async () => {
+    if (!newMember.name || !newMember.responsibilities) {
+      toast.error("Please fill in name and role");
+      return;
+    }
+
+    setSaving(true);
+    const memberData: TablesInsert<"team_members"> = {
+      name: newMember.name,
+      email: newMember.email || null,
+      mobile: newMember.mobile || null,
+      responsibilities: newMember.responsibilities,
+      shift_details: formType === "volunteer" ? newMember.shift_details : null,
+      role: formType
+    };
+
+    const { error } = await supabase
+      .from("team_members")
+      .insert(memberData);
+    
+    if (error) {
+      toast.error("Failed to add team member");
+      console.error(error);
+    } else {
+      toast.success("Team member added successfully");
+      setNewMember({ name: "", email: "", mobile: "", responsibilities: "", shift_details: "" });
       setShowForm(false);
+      fetchTeamMembers();
+    }
+    setSaving(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase
+      .from("team_members")
+      .delete()
+      .eq("id", id);
+    
+    if (error) {
+      toast.error("Failed to delete team member");
+      console.error(error);
+    } else {
+      toast.success("Team member deleted");
+      setTeam(team.filter(m => m.id !== id));
     }
   };
 
-  const handleDelete = (id: string) => {
-    setTeam(team.filter(m => m.id !== id));
-  };
+  const officials = team.filter(m => m.role === "official");
+  const volunteers = team.filter(m => m.role === "volunteer");
 
-  const officials = team.filter(m => m.type === "official");
-  const volunteers = team.filter(m => m.type === "volunteer");
+  if (loading) {
+    return (
+      <PageLayout>
+        <div className="container py-8 flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout>
@@ -127,8 +177,8 @@ export default function Team() {
                   <Label htmlFor="role">Role</Label>
                   <select
                     id="role"
-                    value={newMember.role}
-                    onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
+                    value={newMember.responsibilities}
+                    onChange={(e) => setNewMember({ ...newMember, responsibilities: e.target.value })}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="">Select role</option>
@@ -151,40 +201,32 @@ export default function Team() {
                   <Label htmlFor="phone">Phone</Label>
                   <Input
                     id="phone"
-                    value={newMember.phone}
-                    onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
+                    value={newMember.mobile}
+                    onChange={(e) => setNewMember({ ...newMember, mobile: e.target.value })}
                     placeholder="Enter phone number"
                   />
                 </div>
                 {formType === "volunteer" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="shift">Shift</Label>
-                      <select
-                        id="shift"
-                        value={newMember.shift}
-                        onChange={(e) => setNewMember({ ...newMember, shift: e.target.value })}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="">Select shift</option>
-                        {shifts.map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="duties">Duties</Label>
-                      <Input
-                        id="duties"
-                        value={newMember.duties}
-                        onChange={(e) => setNewMember({ ...newMember, duties: e.target.value })}
-                        placeholder="Enter assigned duties"
-                      />
-                    </div>
-                  </>
+                  <div className="space-y-2">
+                    <Label htmlFor="shift">Shift</Label>
+                    <select
+                      id="shift"
+                      value={newMember.shift_details}
+                      onChange={(e) => setNewMember({ ...newMember, shift_details: e.target.value })}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Select shift</option>
+                      {shifts.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
                 )}
                 <div className="md:col-span-2 flex gap-2">
-                  <Button onClick={handleAddMember}>Add Member</Button>
+                  <Button onClick={handleAddMember} disabled={saving}>
+                    {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Add Member
+                  </Button>
                   <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
                 </div>
               </div>
@@ -205,87 +247,109 @@ export default function Team() {
           </TabsList>
 
           <TabsContent value="officials">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {officials.map((member) => (
-                <Card key={member.id} className="animate-fade-in">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Users className="h-6 w-6 text-primary" />
+            {officials.length === 0 ? (
+              <Card className="p-8 text-center text-muted-foreground">
+                <p>No officials added yet. Click "Add Member" to get started.</p>
+              </Card>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {officials.map((member) => (
+                  <Card key={member.id} className="animate-fade-in">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Users className="h-6 w-6 text-primary" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-foreground">{member.name}</h3>
+                            <Badge variant="secondary">{member.responsibilities}</Badge>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-semibold text-foreground">{member.name}</h3>
-                          <Badge variant="secondary">{member.role}</Badge>
-                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-destructive"
+                          onClick={() => handleDelete(member.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-destructive"
-                        onClick={() => handleDelete(member.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="mt-4 space-y-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Mail className="h-3 w-3" />
-                        {member.email}
+                      <div className="mt-4 space-y-2 text-sm text-muted-foreground">
+                        {member.email && (
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-3 w-3" />
+                            {member.email}
+                          </div>
+                        )}
+                        {member.mobile && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-3 w-3" />
+                            {member.mobile}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-3 w-3" />
-                        {member.phone}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="volunteers">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {volunteers.map((member) => (
-                <Card key={member.id} className="animate-fade-in">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-12 w-12 rounded-full bg-info/10 flex items-center justify-center">
-                          <UserCheck className="h-6 w-6 text-info" />
+            {volunteers.length === 0 ? (
+              <Card className="p-8 text-center text-muted-foreground">
+                <p>No volunteers added yet. Click "Add Member" to get started.</p>
+              </Card>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {volunteers.map((member) => (
+                  <Card key={member.id} className="animate-fade-in">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 rounded-full bg-info/10 flex items-center justify-center">
+                            <UserCheck className="h-6 w-6 text-info" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-foreground">{member.name}</h3>
+                            <Badge variant="outline">{member.responsibilities}</Badge>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-semibold text-foreground">{member.name}</h3>
-                          <Badge variant="outline">{member.role}</Badge>
-                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-destructive"
+                          onClick={() => handleDelete(member.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-destructive"
-                        onClick={() => handleDelete(member.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="mt-4 space-y-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-3 w-3" />
-                        {member.shift}
+                      <div className="mt-4 space-y-2 text-sm text-muted-foreground">
+                        {member.shift_details && (
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-3 w-3" />
+                            {member.shift_details}
+                          </div>
+                        )}
+                        {member.responsibilities && (
+                          <div className="flex items-center gap-2">
+                            <Briefcase className="h-3 w-3" />
+                            {member.responsibilities}
+                          </div>
+                        )}
+                        {member.mobile && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-3 w-3" />
+                            {member.mobile}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="h-3 w-3" />
-                        {member.duties}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-3 w-3" />
-                        {member.phone}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </div>
