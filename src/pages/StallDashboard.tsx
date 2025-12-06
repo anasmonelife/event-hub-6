@@ -110,7 +110,7 @@ export default function StallDashboard() {
   const totalBilledAmount = transactions.reduce((sum, t) => sum + Number(t.total), 0);
   
   // Calculate total bill balance from all transactions (after commission deduction per item)
-  const totalBillBalance = transactions.reduce((txSum, tx) => {
+  const totalBillBalanceBeforePayments = transactions.reduce((txSum, tx) => {
     const items = Array.isArray(tx.items) ? tx.items as Array<{ price?: number; quantity?: number; event_margin?: number }> : [];
     const txBalance = items.reduce((sum, item) => {
       const itemTotal = Number(item.price || 0) * Number(item.quantity || 1);
@@ -120,6 +120,14 @@ export default function StallDashboard() {
     }, 0);
     return txSum + txBalance;
   }, 0);
+
+  // Calculate total payments received for this stall
+  const totalPaymentsReceived = payments
+    .filter(p => p.payment_type === "participant")
+    .reduce((sum, p) => sum + Number(p.amount_paid || 0), 0);
+
+  // Bill Balance = Balance after commission - Payments already received
+  const totalBillBalance = Math.max(0, totalBillBalanceBeforePayments - totalPaymentsReceived);
 
   // Separate pending and delivered orders
   const pendingOrders = transactions.filter(t => t.status !== "delivered");
@@ -230,7 +238,9 @@ export default function StallDashboard() {
                 <IndianRupee className="h-5 w-5" />
                 {totalBillBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
-              <p className="text-xs text-muted-foreground">After commission deduction</p>
+              <p className="text-xs text-muted-foreground">
+                {totalBillBalance === 0 ? "Fully paid" : "Remaining to receive"}
+              </p>
             </CardContent>
           </Card>
         </div>

@@ -14,7 +14,7 @@ import {
   Receipt,
   Loader2
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -25,16 +25,14 @@ type Payment = Tables<"payments">;
 type BillingTransaction = Tables<"billing_transactions">;
 type Registration = Tables<"registrations">;
 
-const EVENT_MARGIN = 20;
-
 export default function Accounts() {
   const queryClient = useQueryClient();
   const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [paymentType, setPaymentType] = useState<Enums<"payment_type">>("participant");
+  const [paymentType, setPaymentType] = useState<"stall" | "other">("stall");
   
-  const [participantPayment, setParticipantPayment] = useState({
+  const [stallPayment, setStallPayment] = useState({
     stallId: "",
-    billedAmount: ""
+    amount: ""
   });
 
   const [otherPayment, setOtherPayment] = useState({
@@ -115,7 +113,7 @@ export default function Accounts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
-      setParticipantPayment({ stallId: "", billedAmount: "" });
+      setStallPayment({ stallId: "", amount: "" });
       setOtherPayment({ narration: "", amount: "" });
       setShowPaymentForm(false);
       toast.success("Payment recorded!");
@@ -125,43 +123,62 @@ export default function Accounts() {
     }
   });
 
-  // Fetch stall registration payments (booking fees)
-  const { data: stallPayments = [] } = useQuery({
-    queryKey: ['stall_payments'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*, stalls(counter_name)')
-        .eq('payment_type', 'participant')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    }
-  });
+  // Calculate stall details when a stall is selected
+  const selectedStallDetails = useMemo(() => {
+    if (!stallPayment.stallId) return null;
 
-  // Calculate totals - include stall booking fees as revenue
+    const stallTransactions = billingTransactions.filter((t: any) => t.stall_id === stallPayment.stallId);
+    const billedAmount = stallTransactions.reduce((sum: number, t: any) => sum + (t.total || 0), 0);
+    
+    // Calculate Bill Balance using per-item commission deduction
+    const billBalance = stallTransactions.reduce((txSum: number, tx: any) => {
+      const items = Array.isArray(tx.items) ? tx.items as Array<{ price?: number; quantity?: number; event_margin?: number }> : [];
+      const txBalance = items.reduce((sum: number, item) => {
+        const itemTotal = Number(item.price || 0) * Number(item.quantity || 1);
+        const commission = Number(item.event_margin || 20);
+        const itemBalance = itemTotal * (1 - commission / 100);
+        return sum + itemBalance;
+      }, 0);
+      return txSum + txBalance;
+    }, 0);
+    
+    // Amount already paid to this stall
+    const alreadyPaid = payments
+      .filter((p: any) => p.stall_id === stallPayment.stallId && p.payment_type === "participant")
+      .reduce((sum: number, p: any) => sum + (p.amount_paid || 0), 0);
+    
+    // Remaining balance
+    const remainingBalance = Math.max(0, billBalance - alreadyPaid);
+    
+    const stallName = stalls.find(s => s.id === stallPayment.stallId)?.counter_name || 'Unknown';
+
+    return { billedAmount, billBalance, alreadyPaid, remainingBalance, stallName };
+  }, [stallPayment.stallId, billingTransactions, payments, stalls]);
+
+  // Calculate totals
   const totalBillingCollected = billingTransactions.reduce((sum: number, t: any) => sum + (t.total || 0), 0);
   const totalRegistrationCollected = registrations
     .filter(r => r.registration_type !== "stall_counter")
     .reduce((sum, r) => sum + (r.amount || 0), 0);
-  const totalStallBookingFees = stallPayments.reduce((sum: number, p: any) => sum + (p.amount_paid || 0), 0);
-  const totalCollected = totalBillingCollected + totalRegistrationCollected + totalStallBookingFees;
+  
+  // Stall booking fees (registration fees from stalls)
+  const stallBookingFees = stalls.reduce((sum, s) => sum + (s.registration_fee || 0), 0);
+  
+  const totalCollected = totalBillingCollected + totalRegistrationCollected + stallBookingFees;
 
-  const totalPaid = payments
-    .filter((p: any) => p.payment_type === "other")
-    .reduce((sum: number, p: any) => sum + (p.amount_paid || 0), 0);
-  const cashBalance = totalCollected - totalPaid;
-
-  // Participant payments are payments made TO participants (excluding stall booking fees which are revenue)
-  const participantPaymentsTotal = payments
-    .filter((p: any) => p.payment_type === "participant" && p.category !== "stall_booking")
+  // Total paid includes both stall payments and other payments
+  const stallPaymentsTotal = payments
+    .filter((p: any) => p.payment_type === "participant")
     .reduce((sum: number, p: any) => sum + (p.amount_paid || 0), 0);
 
   const otherPaymentsTotal = payments
     .filter((p: any) => p.payment_type === "other")
     .reduce((sum: number, p: any) => sum + (p.amount_paid || 0), 0);
 
-  // Registration type totals (excluding stall registration fees)
+  const totalPaid = stallPaymentsTotal + otherPaymentsTotal;
+  const cashBalance = totalCollected - totalPaid;
+
+  // Registration type totals
   const empBookingTotal = registrations
     .filter(r => r.registration_type === "employment_booking")
     .reduce((sum, r) => sum + (r.amount || 0), 0);
@@ -170,22 +187,23 @@ export default function Accounts() {
     .filter(r => r.registration_type === "employment_registration")
     .reduce((sum, r) => sum + (r.amount || 0), 0);
 
-  const handleParticipantPayment = () => {
-    if (!participantPayment.stallId || !participantPayment.billedAmount) {
-      toast.error("Please fill all fields");
+  const handleStallPayment = () => {
+    if (!stallPayment.stallId || !stallPayment.amount) {
+      toast.error("Please select a stall and enter amount");
       return;
     }
 
-    const billed = parseFloat(participantPayment.billedAmount);
-    const deduction = billed * (EVENT_MARGIN / 100);
-    const payable = billed - deduction;
+    const amount = parseFloat(stallPayment.amount);
+    if (selectedStallDetails && amount > selectedStallDetails.remainingBalance) {
+      toast.error("Amount exceeds remaining balance");
+      return;
+    }
 
     createPaymentMutation.mutate({
       payment_type: "participant",
-      stall_id: participantPayment.stallId,
-      total_billed: billed,
-      margin_deducted: deduction,
-      amount_paid: payable
+      stall_id: stallPayment.stallId,
+      amount_paid: amount,
+      narration: `Payment to ${selectedStallDetails?.stallName}`
     });
   };
 
@@ -207,7 +225,7 @@ export default function Accounts() {
     return new Date(dateStr).toLocaleDateString();
   };
 
-  // Build collections list for display - include stall booking fees as revenue
+  // Build collections list for display
   const collections = [
     ...billingTransactions.map((t: any) => ({
       id: t.id,
@@ -217,13 +235,13 @@ export default function Accounts() {
       amount: t.total,
       date: t.created_at
     })),
-    ...stallPayments.map((p: any) => ({
-      id: p.id,
+    ...stalls.filter(s => s.registration_fee && s.registration_fee > 0).map((s) => ({
+      id: s.id,
       type: 'stall_booking' as const,
       category: 'Stall Booking Fee',
-      description: p.stalls?.counter_name || 'Unknown Stall',
-      amount: p.amount_paid,
-      date: p.created_at
+      description: s.counter_name,
+      amount: s.registration_fee || 0,
+      date: s.created_at
     })),
     ...registrations
       .filter(r => r.registration_type !== "stall_counter")
@@ -247,7 +265,7 @@ export default function Accounts() {
           </div>
           <Button onClick={() => setShowPaymentForm(!showPaymentForm)} variant="accent">
             <Plus className="h-4 w-4 mr-2" />
-            New Payment
+            Event Payments
           </Button>
         </div>
 
@@ -299,146 +317,108 @@ export default function Accounts() {
         {showPaymentForm && (
           <Card className="mb-8 animate-slide-up">
             <CardHeader>
-              <CardTitle>Record Payment</CardTitle>
+              <CardTitle>Event Payments</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-2 mb-4">
+              <div className="flex gap-2 mb-6">
                 <Button
-                  variant={paymentType === "participant" ? "default" : "outline"}
-                  onClick={() => setPaymentType("participant")}
+                  variant={paymentType === "stall" ? "default" : "outline"}
+                  onClick={() => setPaymentType("stall")}
                 >
                   <Store className="h-4 w-4 mr-2" />
-                  Participant Payment
+                  Payment to Stall
                 </Button>
                 <Button
                   variant={paymentType === "other" ? "default" : "outline"}
                   onClick={() => setPaymentType("other")}
                 >
                   <Receipt className="h-4 w-4 mr-2" />
-                  Other Payment
+                  Other Payments
                 </Button>
               </div>
 
-              {paymentType === "participant" ? (
-                <div className="grid md:grid-cols-2 gap-4">
+              {paymentType === "stall" ? (
+                <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Select Stall</Label>
                     <select
-                      value={participantPayment.stallId}
-                      onChange={(e) => setParticipantPayment({ ...participantPayment, stallId: e.target.value })}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={stallPayment.stallId}
+                      onChange={(e) => setStallPayment({ ...stallPayment, stallId: e.target.value, amount: "" })}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <option value="">Select stall</option>
                       {stalls.map(s => (
-                        <option key={s.id} value={s.id}>{s.counter_name}</option>
+                        <option key={s.id} value={s.id}>{s.counter_name} - {s.participant_name}</option>
                       ))}
                     </select>
                   </div>
-                  {participantPayment.stallId && (() => {
-                    // Total billed from billing transactions
-                    const stallTransactions = billingTransactions.filter((t: any) => t.stall_id === participantPayment.stallId);
-                    const stallBilledAmount = stallTransactions.reduce((sum: number, t: any) => sum + (t.total || 0), 0);
-                    
-                    // Calculate Bill Balance using same logic as StallDashboard (per-item commission deduction)
-                    const stallBillBalance = stallTransactions.reduce((txSum: number, tx: any) => {
-                      const items = Array.isArray(tx.items) ? tx.items as Array<{ price?: number; quantity?: number; event_margin?: number }> : [];
-                      const txBalance = items.reduce((sum: number, item) => {
-                        const itemTotal = Number(item.price || 0) * Number(item.quantity || 1);
-                        const commission = Number(item.event_margin || 20);
-                        const itemBalance = itemTotal * (1 - commission / 100);
-                        return sum + itemBalance;
-                      }, 0);
-                      return txSum + txBalance;
-                    }, 0);
-                    
-                    // Amount paid TO stall (excluding registration fee - non-refundable)
-                    const stallPaidToStall = payments
-                      .filter((p: any) => 
-                        p.stall_id === participantPayment.stallId && 
-                        p.payment_type === "participant" && 
-                        !(p.narration && p.narration.toLowerCase().includes("registration fee"))
-                      )
-                      .reduce((sum: number, p: any) => sum + (p.amount_paid || 0), 0);
-                    
-                    // Remaining balance to be paid
-                    const remainingBalance = stallBillBalance - stallPaidToStall;
-                    
-                    // Stall registration fee (non-refundable)
-                    const stallFee = payments
-                      .filter((p: any) => 
-                        p.stall_id === participantPayment.stallId && 
-                        p.narration && p.narration.toLowerCase().includes("registration fee")
-                      )
-                      .reduce((sum: number, p: any) => sum + (p.amount_paid || 0), 0);
-                    return (
-                      <div className="md:col-span-2 p-4 bg-muted rounded-lg space-y-3">
-                        <div className="grid grid-cols-4 gap-4 text-center">
-                          <div>
-                            <p className="text-sm text-muted-foreground">Billed Amount</p>
-                            <p className="text-lg font-semibold text-foreground">₹{stallBilledAmount.toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Bill Balance</p>
-                            <p className="text-lg font-semibold text-green-600">₹{stallBillBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                            <p className="text-xs text-muted-foreground">After commission</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Amount Paid</p>
-                            <p className="text-lg font-semibold text-success">₹{stallPaidToStall.toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Remaining</p>
-                            <p className={`text-lg font-bold ${remainingBalance > 0 ? 'text-warning' : 'text-success'}`}>
-                              ₹{remainingBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                            </p>
-                          </div>
-                        </div>
-                        {stallFee > 0 && (
-                          <div className="pt-2 border-t border-border text-center">
-                            <p className="text-xs text-muted-foreground">Stall Fee Paid: ₹{stallFee.toLocaleString()} <span className="text-warning">(Non-refundable)</span></p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  <div className="space-y-2">
-                    <Label>Total Billed Amount (₹)</Label>
-                    <Input
-                      type="number"
-                      value={participantPayment.billedAmount}
-                      onChange={(e) => setParticipantPayment({ ...participantPayment, billedAmount: e.target.value })}
-                      placeholder="Enter billed amount"
-                    />
-                  </div>
-                  {participantPayment.billedAmount && (
-                    <div className="md:col-span-2 p-4 bg-muted rounded-lg">
-                      <div className="grid grid-cols-3 gap-4 text-center">
+
+                  {selectedStallDetails && (
+                    <div className="p-4 bg-muted rounded-lg space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                         <div>
                           <p className="text-sm text-muted-foreground">Billed Amount</p>
-                          <p className="text-lg font-semibold">₹{parseFloat(participantPayment.billedAmount).toLocaleString()}</p>
+                          <p className="text-lg font-semibold text-foreground">₹{selectedStallDetails.billedAmount.toLocaleString()}</p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">Event Margin ({EVENT_MARGIN}%)</p>
-                          <p className="text-lg font-semibold text-warning">
-                            -₹{(parseFloat(participantPayment.billedAmount) * EVENT_MARGIN / 100).toLocaleString()}
-                          </p>
+                          <p className="text-sm text-muted-foreground">Bill Balance</p>
+                          <p className="text-lg font-semibold text-success">₹{selectedStallDetails.billBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                          <p className="text-xs text-muted-foreground">After commission</p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">Payable Amount</p>
-                          <p className="text-lg font-bold text-success">
-                            ₹{(parseFloat(participantPayment.billedAmount) * (1 - EVENT_MARGIN / 100)).toLocaleString()}
+                          <p className="text-sm text-muted-foreground">Already Paid</p>
+                          <p className="text-lg font-semibold text-primary">₹{selectedStallDetails.alreadyPaid.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Remaining Balance</p>
+                          <p className={`text-lg font-bold ${selectedStallDetails.remainingBalance > 0 ? 'text-warning' : 'text-success'}`}>
+                            ₹{selectedStallDetails.remainingBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                           </p>
                         </div>
                       </div>
+
+                      {selectedStallDetails.remainingBalance > 0 && (
+                        <div className="pt-4 border-t border-border space-y-4">
+                          <div className="space-y-2">
+                            <Label>Payment Amount (₹)</Label>
+                            <Input
+                              type="number"
+                              value={stallPayment.amount}
+                              onChange={(e) => setStallPayment({ ...stallPayment, amount: e.target.value })}
+                              placeholder={`Max: ₹${selectedStallDetails.remainingBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                              max={selectedStallDetails.remainingBalance}
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              onClick={handleStallPayment} 
+                              disabled={createPaymentMutation.isPending || !stallPayment.amount}
+                            >
+                              {createPaymentMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                              Process Payment
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              onClick={() => setStallPayment({ ...stallPayment, amount: String(selectedStallDetails.remainingBalance) })}
+                            >
+                              Pay Full Amount
+                            </Button>
+                            <Button variant="ghost" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedStallDetails.remainingBalance === 0 && (
+                        <div className="pt-4 border-t border-border text-center">
+                          <p className="text-success font-medium">✓ Fully Paid</p>
+                        </div>
+                      )}
                     </div>
                   )}
-                  <div className="md:col-span-2 flex gap-2">
-                    <Button onClick={handleParticipantPayment} disabled={createPaymentMutation.isPending}>
-                      {createPaymentMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      Process Payment
-                    </Button>
-                    <Button variant="outline" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
-                  </div>
+
+                  {!selectedStallDetails && (
+                    <p className="text-sm text-muted-foreground">Select a stall to view payment details</p>
+                  )}
                 </div>
               ) : (
                 <div className="grid md:grid-cols-2 gap-4">
@@ -464,7 +444,7 @@ export default function Accounts() {
                       {createPaymentMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                       Record Payment
                     </Button>
-                    <Button variant="outline" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
+                    <Button variant="ghost" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
                   </div>
                 </div>
               )}
@@ -507,7 +487,7 @@ export default function Accounts() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Stall Booking Fee</p>
-                      <p className="text-xl font-bold text-foreground">₹{totalStallBookingFees.toLocaleString()}</p>
+                      <p className="text-xl font-bold text-foreground">₹{stallBookingFees.toLocaleString()}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -587,8 +567,8 @@ export default function Accounts() {
                       <Store className="h-5 w-5 text-destructive" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Participant Payments</p>
-                      <p className="text-xl font-bold text-foreground">₹{participantPaymentsTotal.toLocaleString()}</p>
+                      <p className="text-sm text-muted-foreground">Stall Payments</p>
+                      <p className="text-xl font-bold text-foreground">₹{stallPaymentsTotal.toLocaleString()}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -641,12 +621,12 @@ export default function Accounts() {
                                   ? 'bg-destructive/10 text-destructive' 
                                   : 'bg-warning/10 text-warning'
                               }`}>
-                                {p.payment_type === 'participant' ? 'Participant' : 'Other'}
+                                {p.payment_type === 'participant' ? 'Stall Payment' : 'Other'}
                               </span>
                             </td>
                             <td className="p-4 text-foreground">
                               {p.payment_type === 'participant' 
-                                ? `${p.stalls?.counter_name || 'Unknown'} - After ${EVENT_MARGIN}% deduction`
+                                ? p.stalls?.counter_name || 'Unknown Stall'
                                 : p.narration || 'No description'}
                             </td>
                             <td className="p-4 text-right font-semibold text-destructive">-₹{p.amount_paid.toLocaleString()}</td>
