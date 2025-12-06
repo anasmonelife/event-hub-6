@@ -276,32 +276,49 @@ export default function StallDashboard() {
                       <TableHead>Receipt</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Bill Amount</TableHead>
+                      <TableHead className="text-right">Balance Amount</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {transactions.map(tx => <TableRow key={tx.id}>
-                        <TableCell>{tx.serial_number}</TableCell>
-                        <TableCell className="font-mono text-xs">{tx.receipt_number}</TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{tx.customer_name || "-"}</p>
-                            <p className="text-xs text-muted-foreground">{tx.customer_mobile || "-"}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {tx.created_at ? format(new Date(tx.created_at), "dd/MM/yy HH:mm") : "-"}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          ₹{Number(tx.total).toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={tx.status === "delivered" ? "default" : "secondary"}>
-                            {tx.status === "delivered" ? "Delivered" : "Pending"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>)}
+                    {transactions.map(tx => {
+                      // Calculate balance by deducting commission per item
+                      const items = Array.isArray(tx.items) ? tx.items : [];
+                      const balanceAmount = items.reduce((sum: number, item: any) => {
+                        const itemTotal = Number(item.selling_price || 0) * Number(item.quantity || 1);
+                        const commission = Number(item.event_margin || 20);
+                        const itemBalance = itemTotal * (1 - commission / 100);
+                        return sum + itemBalance;
+                      }, 0);
+                      
+                      return (
+                        <TableRow key={tx.id}>
+                          <TableCell>{tx.serial_number}</TableCell>
+                          <TableCell className="font-mono text-xs">{tx.receipt_number}</TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{tx.customer_name || "-"}</p>
+                              <p className="text-xs text-muted-foreground">{tx.customer_mobile || "-"}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {tx.created_at ? format(new Date(tx.created_at), "dd/MM/yy HH:mm") : "-"}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            ₹{Number(tx.total).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-green-600">
+                            ₹{balanceAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={tx.status === "delivered" ? "default" : "secondary"}>
+                              {tx.status === "delivered" ? "Delivered" : "Pending"}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>}
