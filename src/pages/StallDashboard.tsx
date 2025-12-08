@@ -8,10 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Store, Receipt, Wallet, LogOut, IndianRupee, ShoppingCart, CheckCircle, Clock } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { Store, Receipt, Wallet, LogOut, IndianRupee, ShoppingCart, CheckCircle, Clock, Eye, X } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import logo from "@/assets/logo.jpg";
+
+interface BillItem {
+  name: string;
+  price: number;
+  quantity: number;
+  event_margin: number;
+}
 export default function StallDashboard() {
   const {
     stall,
@@ -132,6 +141,23 @@ export default function StallDashboard() {
   // Separate pending and delivered orders
   const pendingOrders = transactions.filter(t => t.status !== "delivered");
   const deliveredOrders = transactions.filter(t => t.status === "delivered");
+  // State for bill details dialog
+  const [selectedBill, setSelectedBill] = useState<typeof transactions[0] | null>(null);
+
+  const getBillItems = (bill: typeof transactions[0]): BillItem[] => {
+    if (!Array.isArray(bill.items)) return [];
+    return bill.items as unknown as BillItem[];
+  };
+
+  const calculateBillBalance = (bill: typeof transactions[0]) => {
+    const items = getBillItems(bill);
+    return items.reduce((sum, item) => {
+      const itemTotal = Number(item.price || 0) * Number(item.quantity || 1);
+      const commission = Number(item.event_margin || 20);
+      return sum + itemTotal * (1 - commission / 100);
+    }, 0);
+  };
+
   const OrderTable = ({
     orders,
     showDeliverButton = false,
@@ -150,6 +176,7 @@ export default function StallDashboard() {
             <TableHead>Items</TableHead>
             <TableHead className="text-right">Total</TableHead>
             <TableHead>Date</TableHead>
+            <TableHead>Details</TableHead>
             {showDeliverButton && <TableHead>Action</TableHead>}
           </TableRow>
         </TableHeader>
@@ -171,6 +198,11 @@ export default function StallDashboard() {
               </TableCell>
               <TableCell className="text-xs">
                 {tx.created_at ? format(new Date(tx.created_at), "dd/MM/yy HH:mm") : "-"}
+              </TableCell>
+              <TableCell>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedBill(tx)}>
+                  <Eye className="h-4 w-4" />
+                </Button>
               </TableCell>
               {showDeliverButton && onDeliver && <TableCell>
                   <Button size="sm" onClick={() => onDeliver(tx.id)} disabled={updateOrderStatus.isPending}>
@@ -301,18 +333,12 @@ export default function StallDashboard() {
                       <TableHead className="text-right">Bill Amount</TableHead>
                       <TableHead className="text-right">Balance Amount</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Details</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {transactions.map(tx => {
-                      // Calculate balance by deducting commission per item
-                      const items = Array.isArray(tx.items) ? tx.items : [];
-                      const balanceAmount = items.reduce((sum: number, item: any) => {
-                        const itemTotal = Number(item.price || 0) * Number(item.quantity || 1);
-                        const commission = Number(item.event_margin || 20);
-                        const itemBalance = itemTotal * (1 - commission / 100);
-                        return sum + itemBalance;
-                      }, 0);
+                      const balanceAmount = calculateBillBalance(tx);
                       
                       return (
                         <TableRow key={tx.id}>
@@ -338,6 +364,11 @@ export default function StallDashboard() {
                               {tx.status === "delivered" ? "Delivered" : "Pending"}
                             </Badge>
                           </TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedBill(tx)}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -347,5 +378,95 @@ export default function StallDashboard() {
           </CardContent>
         </Card>
       </main>
+
+      {/* Bill Details Dialog */}
+      <Dialog open={!!selectedBill} onOpenChange={() => setSelectedBill(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-primary" />
+              Bill Details
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedBill && (
+            <div className="space-y-4">
+              {/* Bill Info */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Receipt No</p>
+                  <p className="font-mono font-medium">{selectedBill.receipt_number}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Serial No</p>
+                  <p className="font-medium">{selectedBill.serial_number}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Date</p>
+                  <p className="font-medium">
+                    {selectedBill.created_at 
+                      ? format(new Date(selectedBill.created_at), "dd MMM yyyy, HH:mm") 
+                      : "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <Badge variant={selectedBill.status === "delivered" ? "default" : "secondary"}>
+                    {selectedBill.status === "delivered" ? "Delivered" : "Pending"}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Customer Info */}
+              {(selectedBill.customer_name || selectedBill.customer_mobile) && (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Customer</p>
+                    <p className="font-medium">{selectedBill.customer_name || "-"}</p>
+                    <p className="text-sm text-muted-foreground">{selectedBill.customer_mobile || "-"}</p>
+                  </div>
+                </>
+              )}
+
+              <Separator />
+
+              {/* Items */}
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Items</p>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {getBillItems(selectedBill).map((item, index) => (
+                    <div key={index} className="flex justify-between items-center py-2 px-3 bg-muted/50 rounded-lg">
+                      <div>
+                        <p className="font-medium">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          ₹{item.price} × {item.quantity} | {item.event_margin}% margin
+                        </p>
+                      </div>
+                      <p className="font-semibold">₹{(item.price * item.quantity).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Totals */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Bill Amount</span>
+                  <span className="font-medium">₹{Number(selectedBill.total).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">After Commission</span>
+                  <span className="font-medium text-green-600">
+                    ₹{calculateBillBalance(selectedBill).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>;
 }
