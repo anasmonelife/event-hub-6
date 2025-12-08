@@ -559,34 +559,19 @@ export default function Accounts() {
           </TabsContent>
 
           <TabsContent value="payments">
-            <div className="grid md:grid-cols-2 gap-4 mb-6">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center">
-                      <Store className="h-5 w-5 text-destructive" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Stall Payments</p>
-                      <p className="text-xl font-bold text-foreground">₹{stallPaymentsTotal.toLocaleString()}</p>
-                    </div>
+            <Card className="mb-6">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-warning/10 flex items-center justify-center">
+                    <Receipt className="h-5 w-5 text-warning" />
                   </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-warning/10 flex items-center justify-center">
-                      <Receipt className="h-5 w-5 text-warning" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Other Payments</p>
-                      <p className="text-xl font-bold text-foreground">₹{otherPaymentsTotal.toLocaleString()}</p>
-                    </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Other Payments</p>
+                    <p className="text-xl font-bold text-foreground">₹{otherPaymentsTotal.toLocaleString()}</p>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                </div>
+              </CardContent>
+            </Card>
 
             <Card>
               <CardContent className="p-0">
@@ -595,7 +580,6 @@ export default function Accounts() {
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
                         <th className="text-left p-4 font-medium text-muted-foreground">Date</th>
-                        <th className="text-left p-4 font-medium text-muted-foreground">Type</th>
                         <th className="text-left p-4 font-medium text-muted-foreground">Description</th>
                         <th className="text-right p-4 font-medium text-muted-foreground">Amount</th>
                       </tr>
@@ -603,32 +587,19 @@ export default function Accounts() {
                     <tbody>
                       {paymentsLoading ? (
                         <tr>
-                          <td colSpan={4} className="p-8 text-center">
+                          <td colSpan={3} className="p-8 text-center">
                             <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                           </td>
                         </tr>
-                      ) : payments.length === 0 ? (
+                      ) : payments.filter((p: any) => p.payment_type === 'other').length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="p-8 text-center text-muted-foreground">No payments yet</td>
+                          <td colSpan={3} className="p-8 text-center text-muted-foreground">No payments yet</td>
                         </tr>
                       ) : (
-                        payments.map((p: any) => (
+                        payments.filter((p: any) => p.payment_type === 'other').map((p: any) => (
                           <tr key={p.id} className="border-b border-border/50">
                             <td className="p-4 text-muted-foreground">{formatDate(p.created_at)}</td>
-                            <td className="p-4">
-                              <span className={`px-2 py-1 rounded-md text-sm ${
-                                p.payment_type === 'participant' 
-                                  ? 'bg-destructive/10 text-destructive' 
-                                  : 'bg-warning/10 text-warning'
-                              }`}>
-                                {p.payment_type === 'participant' ? 'Stall Payment' : 'Other'}
-                              </span>
-                            </td>
-                            <td className="p-4 text-foreground">
-                              {p.payment_type === 'participant' 
-                                ? p.stalls?.counter_name || 'Unknown Stall'
-                                : p.narration || 'No description'}
-                            </td>
+                            <td className="p-4 text-foreground">{p.narration || 'No description'}</td>
                             <td className="p-4 text-right font-semibold text-destructive">-₹{p.amount_paid.toLocaleString()}</td>
                           </tr>
                         ))
