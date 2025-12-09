@@ -22,6 +22,7 @@ export function PanchayathManagement() {
   const queryClient = useQueryClient();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newPanchayath, setNewPanchayath] = useState('');
+  const [wardCount, setWardCount] = useState('');
   const [selectedPanchayath, setSelectedPanchayath] = useState<Panchayath | null>(null);
 
   const { data: panchayaths, isLoading } = useQuery({
@@ -37,17 +38,33 @@ export function PanchayathManagement() {
   });
 
   const addMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const { error } = await supabase
+    mutationFn: async ({ name, totalWards }: { name: string; totalWards: number }) => {
+      // First create the panchayath
+      const { data: panchayathData, error: panchayathError } = await supabase
         .from('panchayaths')
-        .insert({ name });
-      if (error) throw error;
+        .insert({ name })
+        .select()
+        .single();
+      if (panchayathError) throw panchayathError;
+
+      // Then create all wards (1 to totalWards)
+      const wards = Array.from({ length: totalWards }, (_, i) => ({
+        panchayath_id: panchayathData.id,
+        ward_number: String(i + 1),
+        ward_name: null
+      }));
+
+      const { error: wardsError } = await supabase
+        .from('wards')
+        .insert(wards);
+      if (wardsError) throw wardsError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['panchayaths'] });
       setNewPanchayath('');
+      setWardCount('');
       setIsAddOpen(false);
-      toast({ title: 'Panchayath added successfully' });
+      toast({ title: 'Panchayath added with wards successfully' });
     },
     onError: (error: Error) => {
       toast({ title: 'Error adding panchayath', description: error.message, variant: 'destructive' });
@@ -76,7 +93,12 @@ export function PanchayathManagement() {
       toast({ title: 'Please enter a panchayath name', variant: 'destructive' });
       return;
     }
-    addMutation.mutate(newPanchayath.trim());
+    const totalWards = parseInt(wardCount) || 0;
+    if (totalWards < 1) {
+      toast({ title: 'Please enter at least 1 ward', variant: 'destructive' });
+      return;
+    }
+    addMutation.mutate({ name: newPanchayath.trim(), totalWards });
   };
 
   if (selectedPanchayath) {
@@ -117,6 +139,17 @@ export function PanchayathManagement() {
                   value={newPanchayath}
                   onChange={(e) => setNewPanchayath(e.target.value)}
                   placeholder="Enter panchayath name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="ward-count">Total Wards</Label>
+                <Input
+                  id="ward-count"
+                  type="number"
+                  min="1"
+                  value={wardCount}
+                  onChange={(e) => setWardCount(e.target.value)}
+                  placeholder="e.g., 10 (creates wards 1-10)"
                 />
               </div>
               <Button onClick={handleAdd} disabled={addMutation.isPending} className="w-full">
