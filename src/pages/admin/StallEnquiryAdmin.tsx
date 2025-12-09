@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Store, Plus, Pencil, Trash2, FileText, ArrowUp, ArrowDown } from 'lucide-react';
+import { Store, Plus, Pencil, Trash2, FileText, ArrowUp, ArrowDown, Eye, CheckCircle } from 'lucide-react';
 
 interface EnquiryField {
   id: string;
@@ -55,6 +55,7 @@ export default function StallEnquiryAdmin() {
   const [fieldOptions, setFieldOptions] = useState('');
   const [isRequired, setIsRequired] = useState(true);
   const [isActive, setIsActive] = useState(true);
+  const [viewingEnquiry, setViewingEnquiry] = useState<Enquiry | null>(null);
 
   useEffect(() => {
     if (!isLoading && !admin) {
@@ -213,6 +214,23 @@ export default function StallEnquiryAdmin() {
     reorderMutation.mutate({ id: nextField.id, newOrder: field.display_order });
   };
 
+  const verifyEnquiryMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('stall_enquiries')
+        .update({ status: 'verified' })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stall-enquiries'] });
+      toast({ title: 'Enquiry verified successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  });
+
   if (isLoading || !admin) {
     return (
       <PageLayout>
@@ -235,10 +253,10 @@ export default function StallEnquiryAdmin() {
             <CardDescription>Manage stall enquiry form fields and view submissions</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="fields">
+            <Tabs defaultValue="enquiries">
               <TabsList className="mb-4">
-                <TabsTrigger value="fields">Form Fields</TabsTrigger>
                 <TabsTrigger value="enquiries">Enquiries ({enquiries.length})</TabsTrigger>
+                <TabsTrigger value="fields">Form Fields</TabsTrigger>
               </TabsList>
 
               <TabsContent value="fields">
@@ -434,6 +452,62 @@ export default function StallEnquiryAdmin() {
               </TabsContent>
 
               <TabsContent value="enquiries">
+                {/* View Details Dialog */}
+                <Dialog open={!!viewingEnquiry} onOpenChange={(open) => !open && setViewingEnquiry(null)}>
+                  <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>Enquiry Details</DialogTitle>
+                    </DialogHeader>
+                    {viewingEnquiry && (
+                      <div className="space-y-4 py-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-muted-foreground text-xs">Name</Label>
+                            <p className="font-medium">{viewingEnquiry.name}</p>
+                          </div>
+                          <div>
+                            <Label className="text-muted-foreground text-xs">Mobile</Label>
+                            <p className="font-medium">{viewingEnquiry.mobile}</p>
+                          </div>
+                          <div>
+                            <Label className="text-muted-foreground text-xs">Panchayath</Label>
+                            <p className="font-medium">{viewingEnquiry.panchayaths?.name || '-'}</p>
+                          </div>
+                          <div>
+                            <Label className="text-muted-foreground text-xs">Ward</Label>
+                            <p className="font-medium">
+                              {viewingEnquiry.wards 
+                                ? `${viewingEnquiry.wards.ward_number}${viewingEnquiry.wards.ward_name ? ` - ${viewingEnquiry.wards.ward_name}` : ''}`
+                                : '-'}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-muted-foreground text-xs">Status</Label>
+                            <p className="font-medium capitalize">{viewingEnquiry.status}</p>
+                          </div>
+                          <div>
+                            <Label className="text-muted-foreground text-xs">Date</Label>
+                            <p className="font-medium">{new Date(viewingEnquiry.created_at).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                        {Object.keys(viewingEnquiry.responses).length > 0 && (
+                          <div className="border-t pt-4">
+                            <Label className="text-muted-foreground text-xs mb-2 block">Additional Responses</Label>
+                            <div className="space-y-2">
+                              {Object.entries(viewingEnquiry.responses).map(([key, value]) => (
+                                <div key={key} className="flex justify-between">
+                                  <span className="text-muted-foreground">{key}:</span>
+                                  <span className="font-medium">{value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
+
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -443,16 +517,17 @@ export default function StallEnquiryAdmin() {
                       <TableHead>Ward</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {enquiriesLoading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center">Loading...</TableCell>
+                        <TableCell colSpan={7} className="text-center">Loading...</TableCell>
                       </TableRow>
                     ) : enquiries.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">
                           No enquiries yet
                         </TableCell>
                       </TableRow>
@@ -468,7 +543,36 @@ export default function StallEnquiryAdmin() {
                               : '-'}
                           </TableCell>
                           <TableCell>{new Date(enquiry.created_at).toLocaleDateString()}</TableCell>
-                          <TableCell className="capitalize">{enquiry.status}</TableCell>
+                          <TableCell>
+                            <span className={`capitalize px-2 py-1 rounded text-xs ${
+                              enquiry.status === 'verified' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {enquiry.status}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => setViewingEnquiry(enquiry)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              {enquiry.status !== 'verified' && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => verifyEnquiryMutation.mutate(enquiry.id)}
+                                  disabled={verifyEnquiryMutation.isPending}
+                                >
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
