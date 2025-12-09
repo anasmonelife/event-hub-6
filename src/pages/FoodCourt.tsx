@@ -13,8 +13,11 @@ import {
   Clock,
   Trash2,
   Loader2,
-  CreditCard
+  CreditCard,
+  FileText,
+  Eye
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +27,19 @@ import type { Tables } from "@/integrations/supabase/types";
 
 type Stall = Tables<"stalls">;
 type Product = Tables<"products">;
+
+interface Enquiry {
+  id: string;
+  name: string;
+  mobile: string;
+  panchayath_id: string | null;
+  ward_id: string | null;
+  responses: Record<string, string>;
+  status: string;
+  created_at: string;
+  panchayaths?: { name: string } | null;
+  wards?: { ward_number: string; ward_name: string | null } | null;
+}
 
 
 
@@ -48,6 +64,8 @@ export default function FoodCourt() {
     event_margin: "20"  // Commission rate %
   });
 
+  const [viewingEnquiry, setViewingEnquiry] = useState<Enquiry | null>(null);
+
   // Fetch stalls
   const { data: stalls = [], isLoading: stallsLoading } = useQuery({
     queryKey: ['stalls'],
@@ -71,6 +89,24 @@ export default function FoodCourt() {
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as Product[];
+    }
+  });
+
+  // Fetch verified enquiries
+  const { data: verifiedEnquiries = [], isLoading: enquiriesLoading } = useQuery({
+    queryKey: ['verified-stall-enquiries'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('stall_enquiries')
+        .select(`
+          *,
+          panchayaths(name),
+          wards(ward_number, ward_name)
+        `)
+        .eq('status', 'verified')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as Enquiry[];
     }
   });
 
@@ -206,7 +242,7 @@ export default function FoodCourt() {
 
   const getStallProducts = (stallId: string) => products.filter(p => p.stall_id === stallId);
 
-  if (stallsLoading || productsLoading) {
+  if (stallsLoading || productsLoading || enquiriesLoading) {
     return (
       <PageLayout>
         <div className="container py-8 flex items-center justify-center">
@@ -227,7 +263,7 @@ export default function FoodCourt() {
         </div>
 
         <Tabs defaultValue="stalls" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="stalls" className="flex items-center gap-2">
               <Store className="h-4 w-4" />
               Stall Booking
@@ -235,6 +271,10 @@ export default function FoodCourt() {
             <TabsTrigger value="products" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
               Products
+            </TabsTrigger>
+            <TabsTrigger value="enquiries" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Enquiries ({verifiedEnquiries.length})
             </TabsTrigger>
           </TabsList>
 
@@ -487,6 +527,110 @@ export default function FoodCourt() {
                 </Card>
               );
             })}
+          </TabsContent>
+
+          <TabsContent value="enquiries">
+            {/* View Details Dialog */}
+            <Dialog open={!!viewingEnquiry} onOpenChange={(open) => !open && setViewingEnquiry(null)}>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Verified Enquiry Details</DialogTitle>
+                </DialogHeader>
+                {viewingEnquiry && (
+                  <div className="space-y-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-muted-foreground text-xs">Name</p>
+                        <p className="font-medium">{viewingEnquiry.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Mobile</p>
+                        <p className="font-medium">{viewingEnquiry.mobile}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Panchayath</p>
+                        <p className="font-medium">{viewingEnquiry.panchayaths?.name || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Ward</p>
+                        <p className="font-medium">
+                          {viewingEnquiry.wards 
+                            ? `${viewingEnquiry.wards.ward_number}${viewingEnquiry.wards.ward_name ? ` - ${viewingEnquiry.wards.ward_name}` : ''}`
+                            : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">Date</p>
+                        <p className="font-medium">{new Date(viewingEnquiry.created_at).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    {Object.keys(viewingEnquiry.responses).length > 0 && (
+                      <div className="border-t pt-4">
+                        <p className="text-muted-foreground text-xs mb-2">Additional Responses</p>
+                        <div className="space-y-2">
+                          {Object.entries(viewingEnquiry.responses).map(([key, value]) => (
+                            <div key={key} className="flex justify-between">
+                              <span className="text-muted-foreground">{key}:</span>
+                              <span className="font-medium">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {verifiedEnquiries.length === 0 ? (
+                <Card className="md:col-span-2 lg:col-span-3">
+                  <CardContent className="p-8 text-center text-muted-foreground">
+                    No verified enquiries yet
+                  </CardContent>
+                </Card>
+              ) : (
+                verifiedEnquiries.map((enquiry) => (
+                  <Card key={enquiry.id} className="animate-fade-in">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 rounded-xl bg-green-100 flex items-center justify-center">
+                            <CheckCircle className="h-6 w-6 text-green-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-foreground">{enquiry.name}</h3>
+                            <p className="text-sm text-muted-foreground">{enquiry.mobile}</p>
+                          </div>
+                        </div>
+                        <Badge variant="default" className="bg-green-100 text-green-800">
+                          Verified
+                        </Badge>
+                      </div>
+                      <div className="mt-4 text-sm text-muted-foreground">
+                        <p>Panchayath: {enquiry.panchayaths?.name || '-'}</p>
+                        <p>Ward: {enquiry.wards 
+                          ? `${enquiry.wards.ward_number}${enquiry.wards.ward_name ? ` - ${enquiry.wards.ward_name}` : ''}`
+                          : '-'}</p>
+                        <p className="text-xs mt-2">
+                          Submitted: {new Date(enquiry.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="mt-4">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => setViewingEnquiry(enquiry)}
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          View Details
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
