@@ -494,15 +494,18 @@ export default function StallEnquiryAdmin() {
                           </div>
                           {Object.keys(viewingEnquiry.responses).length > 0 && (
                             <div className="border-t pt-4">
-                              <Label className="text-muted-foreground text-xs mb-2 block">Additional Responses</Label>
-                              <div className="space-y-3">
-                                {Object.entries(viewingEnquiry.responses).map(([fieldId, value]) => {
+                              <Label className="text-muted-foreground text-xs mb-3 block">Form Responses</Label>
+                              <div className="space-y-0 rounded-lg overflow-hidden border">
+                                {Object.entries(viewingEnquiry.responses).map(([fieldId, value], index) => {
                                   const field = fields.find(f => f.id === fieldId);
                                   const label = field?.field_label || fieldId;
                                   return (
-                                    <div key={fieldId} className="border-b pb-2">
-                                      <p className="text-muted-foreground text-sm">{label}</p>
-                                      <p className="font-medium">{value}</p>
+                                    <div 
+                                      key={fieldId} 
+                                      className={`p-3 ${index % 2 === 0 ? 'bg-muted/50' : 'bg-background'}`}
+                                    >
+                                      <p className="font-semibold text-sm text-primary">{label}</p>
+                                      <p className="text-foreground mt-1">{value}</p>
                                     </div>
                                   );
                                 })}
