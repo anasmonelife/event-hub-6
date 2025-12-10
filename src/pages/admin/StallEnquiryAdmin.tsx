@@ -536,20 +536,21 @@ export default function StallEnquiryAdmin() {
                                 .map(([fieldId, value]) => {
                                   const field = fields.find(f => f.id === fieldId);
                                   const label = field?.field_label || fieldId;
-                                  const isProductField = label === 'കൊണ്ടുവരാൻ ഉദ്ദേശിക്കുന്ന ഉൽപ്പന്നം' || 
-                                    label.includes('ഉൽപ്പന്നം') || 
-                                    label.toLowerCase().includes('product');
-                                  return { fieldId, value, label, isProductField };
+                                  const isProductField1 = label === 'കൊണ്ടുവരാൻ ഉദ്ദേശിക്കുന്ന ഉൽപ്പന്നം' || label.includes('കൊണ്ടുവരാൻ');
+                                  const isProductField2 = label === 'ഉൽപ്പന്നം വിൽക്കുന്നത്' || label.includes('വിൽക്കുന്നത്');
+                                  const isHighlighted = isProductField1 || isProductField2;
+                                  const sortOrder = isProductField1 ? 0 : isProductField2 ? 1 : 2;
+                                  return { fieldId, value, label, isHighlighted, sortOrder };
                                 })
-                                .sort((a, b) => (b.isProductField ? 1 : 0) - (a.isProductField ? 1 : 0))
-                                .map(({ fieldId, value, label, isProductField }, index) => {
+                                .sort((a, b) => a.sortOrder - b.sortOrder)
+                                .map(({ fieldId, value, label, isHighlighted }, index) => {
                                   return (
                                     <div 
                                       key={fieldId} 
-                                      className={`p-3 ${isProductField ? 'bg-amber-100 dark:bg-amber-900/30 border-l-4 border-amber-500' : index % 2 === 0 ? 'bg-muted/50' : 'bg-background'}`}
+                                      className={`p-3 ${isHighlighted ? 'bg-green-100 dark:bg-green-900/30 border-l-4 border-green-500' : index % 2 === 0 ? 'bg-muted/50' : 'bg-background'}`}
                                     >
-                                      <p className={`font-semibold text-sm ${isProductField ? 'text-amber-700 dark:text-amber-400' : 'text-primary'}`}>{label}</p>
-                                      <p className={`mt-1 ${isProductField ? 'font-medium text-amber-900 dark:text-amber-200' : 'text-foreground'}`}>{value}</p>
+                                      <p className={`font-semibold text-sm ${isHighlighted ? 'text-green-700 dark:text-green-400' : 'text-primary'}`}>{label}</p>
+                                      <p className={`mt-1 ${isHighlighted ? 'font-medium text-green-900 dark:text-green-200' : 'text-foreground'}`}>{value}</p>
                                     </div>
                                   );
                                 })}
