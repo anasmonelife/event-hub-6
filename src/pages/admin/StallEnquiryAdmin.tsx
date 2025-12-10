@@ -535,7 +535,10 @@ export default function StallEnquiryAdmin() {
                               {Object.entries(viewingEnquiry.responses).map(([fieldId, value], index) => {
                                   const field = fields.find(f => f.id === fieldId);
                                   const label = field?.field_label || fieldId;
-                                  const isProductField = label === 'കൊണ്ടുവരാൻ ഉദ്ദേശിക്കുന്ന ഉൽപ്പന്നം';
+                                  // Check both current field label and also check if fieldId itself contains product keywords for old forms
+                                  const isProductField = label === 'കൊണ്ടുവരാൻ ഉദ്ദേശിക്കുന്ന ഉൽപ്പന്നം' || 
+                                    label.includes('ഉൽപ്പന്നം') || 
+                                    label.toLowerCase().includes('product');
                                   return (
                                     <div 
                                       key={fieldId} 
