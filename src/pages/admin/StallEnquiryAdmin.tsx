@@ -686,22 +686,40 @@ export default function StallEnquiryAdmin() {
                             const isProductField2 = label === 'ഉൽപ്പന്നം വിൽക്കുന്നത്' || label.includes('വിൽക്കുന്നത്');
                             const isHighlighted = isProductField1 || isProductField2;
                             const sortOrder = isProductField1 ? 0 : isProductField2 ? 1 : 2;
-                            // Handle object values by converting to string
-                            const displayValue = typeof value === 'object' && value !== null 
-                              ? JSON.stringify(value, null, 2) 
-                              : String(value);
-                            return { fieldId, value: displayValue, label, isHighlighted, sortOrder };
+                            return { fieldId, value, label, isHighlighted, sortOrder };
                           })
                           .sort((a, b) => a.sortOrder - b.sortOrder)
-                          .map(({ fieldId, value, label, isHighlighted }, index) => (
-                            <div 
-                              key={fieldId} 
-                              className={`p-3 ${isHighlighted ? 'bg-green-100 dark:bg-green-900/30 border-l-4 border-green-500' : index % 2 === 0 ? 'bg-muted/50' : 'bg-background'}`}
-                            >
-                              <p className={`font-semibold text-sm ${isHighlighted ? 'text-green-700 dark:text-green-400' : 'text-primary'}`}>{label}</p>
-                              <p className={`mt-1 whitespace-pre-wrap ${isHighlighted ? 'font-medium text-green-900 dark:text-green-200' : 'text-foreground'}`}>{value}</p>
-                            </div>
-                          ))}
+                          .map(({ fieldId, value, label, isHighlighted }, index) => {
+                            // Check if value is an array of products
+                            const isProductArray = Array.isArray(value) && value.length > 0 && value[0]?.product_name !== undefined;
+                            
+                            return (
+                              <div 
+                                key={fieldId} 
+                                className={`p-3 ${isHighlighted ? 'bg-green-100 dark:bg-green-900/30 border-l-4 border-green-500' : index % 2 === 0 ? 'bg-muted/50' : 'bg-background'}`}
+                              >
+                                <p className={`font-semibold text-sm ${isHighlighted ? 'text-green-700 dark:text-green-400' : 'text-primary'}`}>{label}</p>
+                                {isProductArray ? (
+                                  <div className="mt-2 space-y-2">
+                                    {(value as Array<{product_name: string; cost_price: string; selling_price: string; selling_unit: string}>).map((product, pIndex) => (
+                                      <div key={pIndex} className="bg-background rounded-md p-2 border text-sm">
+                                        <p className="font-medium">{product.product_name}</p>
+                                        <div className="grid grid-cols-3 gap-2 mt-1 text-xs text-muted-foreground">
+                                          <span>Cost: ₹{product.cost_price}</span>
+                                          <span>MRP: ₹{product.selling_price}</span>
+                                          <span>{product.selling_unit}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className={`mt-1 whitespace-pre-wrap ${isHighlighted ? 'font-medium text-green-900 dark:text-green-200' : 'text-foreground'}`}>
+                                    {typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   )}
