@@ -126,9 +126,9 @@ export default function StallEnquiry() {
   };
 
   const updateProduct = (index: number, field: keyof Product, value: string) => {
-    const updated = [...products];
-    updated[index][field] = value;
-    setProducts(updated);
+    setProducts(prev => prev.map((p, i) => 
+      i === index ? { ...p, [field]: value } : p
+    ));
   };
 
   const submitMutation = useMutation({
