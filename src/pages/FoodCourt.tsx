@@ -15,7 +15,8 @@ import {
   Loader2,
   CreditCard,
   FileText,
-  Eye
+  Eye,
+  ArrowRightCircle
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -71,6 +72,8 @@ export default function FoodCourt() {
 
   const [viewingEnquiry, setViewingEnquiry] = useState<Enquiry | null>(null);
   const [enquiryPanchayathFilter, setEnquiryPanchayathFilter] = useState<string>("");
+  const [convertingEnquiry, setConvertingEnquiry] = useState<Enquiry | null>(null);
+  const [convertStallData, setConvertStallData] = useState({ counter_name: "", registration_fee: "" });
 
   // Fetch stalls
   const { data: stalls = [], isLoading: stallsLoading } = useQuery({
@@ -256,6 +259,38 @@ export default function FoodCourt() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       toast.success("Product deleted!");
+    }
+  });
+
+  // Convert enquiry to stall mutation
+  const convertToStallMutation = useMutation({
+    mutationFn: async (data: { enquiry: Enquiry; counter_name: string; registration_fee: string }) => {
+      // Check for duplicate mobile
+      const existingStall = stalls.find(s => s.mobile === data.enquiry.mobile);
+      if (existingStall) {
+        throw new Error(`Mobile number already registered for stall: ${existingStall.counter_name}`);
+      }
+
+      const { error } = await supabase
+        .from('stalls')
+        .insert({
+          counter_name: data.counter_name,
+          participant_name: data.enquiry.name,
+          mobile: data.enquiry.mobile,
+          panchayath_id: data.enquiry.panchayath_id,
+          registration_fee: data.registration_fee ? parseFloat(data.registration_fee) : 0,
+          is_verified: false
+        });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stalls'] });
+      setConvertingEnquiry(null);
+      setConvertStallData({ counter_name: "", registration_fee: "" });
+      toast.success("Enquiry converted to stall successfully!");
+    },
+    onError: (error) => {
+      toast.error(error.message);
     }
   });
 
@@ -665,7 +700,7 @@ export default function FoodCourt() {
                           Submitted: {new Date(enquiry.created_at).toLocaleDateString()}
                         </p>
                       </div>
-                      <div className="mt-4">
+                      <div className="mt-4 flex gap-2">
                         <Button 
                           size="sm" 
                           variant="outline"
@@ -673,6 +708,17 @@ export default function FoodCourt() {
                         >
                           <Eye className="h-3 w-3 mr-1" />
                           View Details
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="default"
+                          onClick={() => {
+                            setConvertingEnquiry(enquiry);
+                            setConvertStallData({ counter_name: "", registration_fee: "" });
+                          }}
+                        >
+                          <ArrowRightCircle className="h-3 w-3 mr-1" />
+                          Convert to Stall
                         </Button>
                       </div>
                     </CardContent>
@@ -759,6 +805,63 @@ export default function FoodCourt() {
                   )}
                 </div>
               </ScrollArea>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Convert to Stall Dialog */}
+        <Dialog open={!!convertingEnquiry} onOpenChange={(open) => !open && setConvertingEnquiry(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Convert to Stall Registration</DialogTitle>
+            </DialogHeader>
+            {convertingEnquiry && (
+              <div className="space-y-4 py-4">
+                <div className="bg-muted/50 p-3 rounded-lg space-y-1">
+                  <p className="text-sm"><span className="text-muted-foreground">Name:</span> {convertingEnquiry.name}</p>
+                  <p className="text-sm"><span className="text-muted-foreground">Mobile:</span> {convertingEnquiry.mobile}</p>
+                  <p className="text-sm"><span className="text-muted-foreground">Panchayath:</span> {convertingEnquiry.panchayaths?.name || '-'}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="convertCounterName">Counter Name *</Label>
+                  <Input
+                    id="convertCounterName"
+                    value={convertStallData.counter_name}
+                    onChange={(e) => setConvertStallData({ ...convertStallData, counter_name: e.target.value })}
+                    placeholder="Enter counter/stall name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="convertRegFee">Registration Fee (₹)</Label>
+                  <Input
+                    id="convertRegFee"
+                    type="number"
+                    value={convertStallData.registration_fee}
+                    onChange={(e) => setConvertStallData({ ...convertStallData, registration_fee: e.target.value })}
+                    placeholder="Enter registration fee"
+                  />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button 
+                    onClick={() => {
+                      if (!convertStallData.counter_name) {
+                        toast.error("Please enter counter name");
+                        return;
+                      }
+                      convertToStallMutation.mutate({
+                        enquiry: convertingEnquiry,
+                        counter_name: convertStallData.counter_name,
+                        registration_fee: convertStallData.registration_fee
+                      });
+                    }}
+                    disabled={convertToStallMutation.isPending}
+                  >
+                    {convertToStallMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Register Stall
+                  </Button>
+                  <Button variant="outline" onClick={() => setConvertingEnquiry(null)}>Cancel</Button>
+                </div>
+              </div>
             )}
           </DialogContent>
         </Dialog>
