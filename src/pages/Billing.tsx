@@ -766,29 +766,31 @@ export default function Billing() {
 
   return (
     <PageLayout>
-      <div className="container py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground">Billing & Registrations</h1>
-          <p className="text-muted-foreground mt-1">Process bills and manage registrations</p>
+      <div className="container py-4 md:py-8 px-3 md:px-6">
+        <div className="mb-4 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Billing & Registrations</h1>
+          <p className="text-muted-foreground mt-1 text-sm md:text-base">Process bills and manage registrations</p>
         </div>
 
-        <Tabs defaultValue="billing" className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl grid-cols-4">
-            <TabsTrigger value="billing" className="flex items-center gap-2">
-              <Receipt className="h-4 w-4" />
+        <Tabs defaultValue="billing" className="space-y-4 md:space-y-6">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 md:max-w-2xl h-auto">
+            <TabsTrigger value="billing" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm py-2">
+              <Receipt className="h-3 w-3 md:h-4 md:w-4" />
               Billing
             </TabsTrigger>
-            <TabsTrigger value="receipts" className="flex items-center gap-2">
-              <Printer className="h-4 w-4" />
+            <TabsTrigger value="receipts" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm py-2">
+              <Printer className="h-3 w-3 md:h-4 md:w-4" />
               Receipts
             </TabsTrigger>
-            <TabsTrigger value="registrations" className="flex items-center gap-2">
-              <UserPlus className="h-4 w-4" />
-              Registrations
+            <TabsTrigger value="registrations" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm py-2">
+              <UserPlus className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">Registrations</span>
+              <span className="sm:hidden">Reg.</span>
             </TabsTrigger>
-            <TabsTrigger value="stall-summary" className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Stall Summary
+            <TabsTrigger value="stall-summary" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm py-2">
+              <BarChart3 className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">Stall Summary</span>
+              <span className="sm:hidden">Summary</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1163,22 +1165,22 @@ export default function Billing() {
           </TabsContent>
 
           <TabsContent value="receipts">
-            <div className="mb-6">
+            <div className="mb-4 md:mb-6">
               <Card className="bg-gradient-to-r from-primary/10 to-secondary/10">
-                <CardContent className="py-6">
-                  <div className="flex items-center justify-between">
+                <CardContent className="py-4 md:py-6">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
                       <p className="text-sm text-muted-foreground">Net Collected</p>
-                      <p className="text-3xl font-bold text-primary">
+                      <p className="text-2xl md:text-3xl font-bold text-primary">
                         ₹{totalCollectedFromBills + totalCollectedFromStallRegs + totalCollectedFromOtherRegs - totalSalesReturns}
                       </p>
                     </div>
-                    <div className="text-right space-y-1">
-                      <p className="text-sm text-muted-foreground">From Bills: ₹{totalCollectedFromBills}</p>
-                      <p className="text-sm text-muted-foreground">Stall Registrations: ₹{totalCollectedFromStallRegs}</p>
-                      <p className="text-sm text-muted-foreground">Other Registrations: ₹{totalCollectedFromOtherRegs}</p>
+                    <div className="grid grid-cols-2 md:flex md:flex-col gap-1 md:gap-1 md:text-right text-xs md:text-sm">
+                      <p className="text-muted-foreground">Bills: ₹{totalCollectedFromBills}</p>
+                      <p className="text-muted-foreground">Stall Reg: ₹{totalCollectedFromStallRegs}</p>
+                      <p className="text-muted-foreground">Other Reg: ₹{totalCollectedFromOtherRegs}</p>
                       {totalSalesReturns > 0 && (
-                        <p className="text-sm text-destructive">Sales Returns: -₹{totalSalesReturns}</p>
+                        <p className="text-destructive">Returns: -₹{totalSalesReturns}</p>
                       )}
                     </div>
                   </div>
@@ -1186,7 +1188,7 @@ export default function Billing() {
               </Card>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-2 gap-4 md:gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
@@ -1380,9 +1382,9 @@ export default function Billing() {
           </TabsContent>
 
           <TabsContent value="registrations">
-            <div className="space-y-6">
+            <div className="space-y-4 md:space-y-6">
               {/* Stall Registrations from Food Court */}
-              <div className="grid md:grid-cols-2 gap-6">
+              <div className="grid md:grid-cols-2 gap-4 md:gap-6">
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
@@ -1508,7 +1510,7 @@ export default function Billing() {
               </div>
 
               {/* Other Registrations */}
-              <div className="grid lg:grid-cols-2 gap-6">
+              <div className="grid md:grid-cols-2 gap-4 md:gap-6">
                 <Card>
                   <CardHeader>
                     <CardTitle>New Registration (Other)</CardTitle>
@@ -1629,17 +1631,17 @@ export default function Billing() {
           </TabsContent>
 
           <TabsContent value="stall-summary">
-            <div className="space-y-6">
+            <div className="space-y-4 md:space-y-6">
               {/* Filters */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Store className="h-5 w-5" />
+                <CardHeader className="pb-3 md:pb-6">
+                  <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+                    <Store className="h-4 w-4 md:h-5 md:w-5" />
                     Select Stall
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid md:grid-cols-2 gap-4">
+                  <div className="grid md:grid-cols-2 gap-3 md:gap-4">
                     <div className="space-y-2">
                       <Label>Filter by Panchayath</Label>
                       <Select value={summaryPanchayath} onValueChange={(val) => { setSummaryPanchayath(val); setSummaryStallId(""); }}>
@@ -1710,30 +1712,30 @@ export default function Billing() {
                   </Card>
 
                   {/* Sales Summary Cards */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                     <Card className="bg-gradient-to-br from-primary/10 to-primary/5">
-                      <CardContent className="pt-6">
-                        <p className="text-sm text-muted-foreground">Total Sales</p>
-                        <p className="text-2xl font-bold text-primary">₹{stallTotalSales.toFixed(2)}</p>
+                      <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
+                        <p className="text-xs md:text-sm text-muted-foreground">Total Sales</p>
+                        <p className="text-xl md:text-2xl font-bold text-primary">₹{stallTotalSales.toFixed(0)}</p>
                         <p className="text-xs text-muted-foreground mt-1">{stallBills.length} bills</p>
                       </CardContent>
                     </Card>
                     <Card className="bg-gradient-to-br from-green-500/10 to-green-500/5">
-                      <CardContent className="pt-6">
-                        <p className="text-sm text-muted-foreground">Paid Sales</p>
-                        <p className="text-2xl font-bold text-green-600">₹{stallPaidSales.toFixed(2)}</p>
+                      <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
+                        <p className="text-xs md:text-sm text-muted-foreground">Paid Sales</p>
+                        <p className="text-xl md:text-2xl font-bold text-green-600">₹{stallPaidSales.toFixed(0)}</p>
                       </CardContent>
                     </Card>
                     <Card className="bg-gradient-to-br from-amber-500/10 to-amber-500/5">
-                      <CardContent className="pt-6">
-                        <p className="text-sm text-muted-foreground">Pending Sales</p>
-                        <p className="text-2xl font-bold text-amber-600">₹{stallPendingSales.toFixed(2)}</p>
+                      <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
+                        <p className="text-xs md:text-sm text-muted-foreground">Pending</p>
+                        <p className="text-xl md:text-2xl font-bold text-amber-600">₹{stallPendingSales.toFixed(0)}</p>
                       </CardContent>
                     </Card>
                     <Card className="bg-gradient-to-br from-secondary/10 to-secondary/5">
-                      <CardContent className="pt-6">
-                        <p className="text-sm text-muted-foreground">Commission</p>
-                        <p className="text-2xl font-bold text-secondary-foreground">₹{stallCommission.toFixed(2)}</p>
+                      <CardContent className="pt-4 md:pt-6 px-3 md:px-6">
+                        <p className="text-xs md:text-sm text-muted-foreground">Commission</p>
+                        <p className="text-xl md:text-2xl font-bold text-secondary-foreground">₹{stallCommission.toFixed(0)}</p>
                       </CardContent>
                     </Card>
                   </div>
