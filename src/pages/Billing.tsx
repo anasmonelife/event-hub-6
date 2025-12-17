@@ -801,28 +801,68 @@ export default function Billing() {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label>Enter Counter Number(s)</Label>
-                    <Input
-                      value={counterNumberInput}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setCounterNumberInput(value);
-                        
-                        // Parse comma-separated or space-separated counter numbers
-                        const numbers = value.split(/[,\s]+/).map(n => n.trim()).filter(n => n);
-                        
-                        // Find matching stalls and add them
-                        numbers.forEach(num => {
-                          const matchingStall = stalls.find(s => 
-                            s.counter_number?.toLowerCase() === num.toLowerCase()
-                          );
-                          if (matchingStall && !selectedStalls.includes(matchingStall.id)) {
-                            setSelectedStalls(prev => [...prev, matchingStall.id]);
+                    <div className="flex gap-2">
+                      <Input
+                        value={counterNumberInput}
+                        onChange={(e) => setCounterNumberInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            // Parse comma-separated or space-separated counter numbers
+                            const numbers = counterNumberInput.split(/[,\s]+/).map(n => n.trim()).filter(n => n);
+                            let addedCount = 0;
+                            
+                            numbers.forEach(num => {
+                              const matchingStall = stalls.find(s => 
+                                s.counter_number?.toLowerCase() === num.toLowerCase()
+                              );
+                              if (matchingStall && !selectedStalls.includes(matchingStall.id)) {
+                                setSelectedStalls(prev => [...prev, matchingStall.id]);
+                                addedCount++;
+                              }
+                            });
+                            
+                            if (addedCount > 0) {
+                              setCounterNumberInput("");
+                              toast.success(`Added ${addedCount} counter(s)`);
+                            } else if (numbers.length > 0) {
+                              toast.error("No matching counters found");
+                            }
                           }
-                        });
-                      }}
-                      placeholder="Enter counter numbers (e.g., 1, 2, 3)"
-                      className="h-10"
-                    />
+                        }}
+                        placeholder="Enter counter numbers (e.g., 1, 2, 3)"
+                        className="h-10 flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          const numbers = counterNumberInput.split(/[,\s]+/).map(n => n.trim()).filter(n => n);
+                          let addedCount = 0;
+                          
+                          numbers.forEach(num => {
+                            const matchingStall = stalls.find(s => 
+                              s.counter_number?.toLowerCase() === num.toLowerCase()
+                            );
+                            if (matchingStall && !selectedStalls.includes(matchingStall.id)) {
+                              setSelectedStalls(prev => [...prev, matchingStall.id]);
+                              addedCount++;
+                            }
+                          });
+                          
+                          if (addedCount > 0) {
+                            setCounterNumberInput("");
+                            toast.success(`Added ${addedCount} counter(s)`);
+                          } else if (numbers.length > 0) {
+                            toast.error("No matching counters found");
+                          }
+                        }}
+                        className="h-10"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
