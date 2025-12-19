@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Video, Image, FileText, X } from "lucide-react";
+import { Video, Image, FileText, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface SurveyContent {
   id: string;
@@ -17,16 +18,28 @@ interface SurveyContent {
 }
 
 function getYouTubeEmbedUrl(url: string, autoplay: boolean = false): string | null {
+  // Support regular YouTube URLs
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
   const match = url.match(regExp);
   if (match && match[2].length === 11) {
     return `https://www.youtube.com/embed/${match[2]}${autoplay ? '?autoplay=1&mute=1' : ''}`;
   }
+  
+  // Support YouTube Shorts URLs
+  const shortsRegExp = /^.*(youtube.com\/shorts\/)([^#&?]*).*/;
+  const shortsMatch = url.match(shortsRegExp);
+  if (shortsMatch && shortsMatch[2]) {
+    const videoId = shortsMatch[2].split('?')[0]; // Remove query params
+    return `https://www.youtube.com/embed/${videoId}${autoplay ? '?autoplay=1&mute=1' : ''}`;
+  }
+  
   return null;
 }
 
 export function SurveyView() {
   const [fullscreenPoster, setFullscreenPoster] = useState<SurveyContent | null>(null);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [currentPosterIndex, setCurrentPosterIndex] = useState(0);
 
   const { data: videos } = useQuery({
     queryKey: ['survey-content', 'video'],
@@ -72,51 +85,85 @@ export function SurveyView() {
 
   return (
     <div className="space-y-8">
-      {/* Video Ad Section */}
+      {/* Video Gallery Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Video className="h-5 w-5 text-primary" />
-            Video Advertisement
+            Video Gallery
           </CardTitle>
           <CardDescription>
-            Watch our promotional videos
+            Watch our promotional videos {videos && videos.length > 1 && `(${currentVideoIndex + 1}/${videos.length})`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {videos && videos.length > 0 ? (
-            videos.map((video) => {
-              const embedUrl = video.content_url ? getYouTubeEmbedUrl(video.content_url, true) : null;
-              return (
-                <div key={video.id}>
-                  <h4 className="font-medium mb-2">{video.title}</h4>
-                  <AspectRatio ratio={16 / 9} className="bg-muted rounded-lg overflow-hidden">
-                    {embedUrl ? (
-                      <iframe
-                        src={embedUrl}
-                        title={video.title}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-full"
+            <div className="relative">
+              {(() => {
+                const video = videos[currentVideoIndex];
+                const embedUrl = video?.content_url ? getYouTubeEmbedUrl(video.content_url, false) : null;
+                return (
+                  <div>
+                    <h4 className="font-medium mb-2">{video?.title}</h4>
+                    <AspectRatio ratio={16 / 9} className="bg-muted rounded-lg overflow-hidden">
+                      {embedUrl ? (
+                        <iframe
+                          key={video?.id}
+                          src={embedUrl}
+                          title={video?.title}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          className="w-full h-full"
+                        />
+                      ) : video?.content_url ? (
+                        <video 
+                          key={video?.id}
+                          src={video.content_url} 
+                          controls 
+                          playsInline
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          <Video className="h-16 w-16 text-muted-foreground" />
+                        </div>
+                      )}
+                    </AspectRatio>
+                  </div>
+                );
+              })()}
+              
+              {/* Video Navigation */}
+              {videos.length > 1 && (
+                <div className="flex items-center justify-center gap-4 mt-4">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setCurrentVideoIndex((prev) => (prev === 0 ? videos.length - 1 : prev - 1))}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="flex gap-1">
+                    {videos.map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentVideoIndex(index)}
+                        className={`w-2 h-2 rounded-full transition-colors ${
+                          index === currentVideoIndex ? 'bg-primary' : 'bg-muted-foreground/30'
+                        }`}
                       />
-                    ) : video.content_url ? (
-                      <video 
-                        src={video.content_url} 
-                        controls 
-                        autoPlay
-                        muted
-                        playsInline
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full">
-                        <Video className="h-16 w-16 text-muted-foreground" />
-                      </div>
-                    )}
-                  </AspectRatio>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setCurrentVideoIndex((prev) => (prev === videos.length - 1 ? 0 : prev + 1))}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
                 </div>
-              );
-            })
+              )}
+            </div>
           ) : (
             <AspectRatio ratio={16 / 9} className="bg-muted rounded-lg overflow-hidden">
               <div className="flex items-center justify-center h-full bg-gradient-to-br from-primary/10 to-primary/5">
@@ -132,57 +179,56 @@ export function SurveyView() {
         </CardContent>
       </Card>
 
-      {/* Poster Ad Section */}
+      {/* Photo Gallery Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Image className="h-5 w-5 text-primary" />
-            Poster Gallery
+            Photo Gallery
           </CardTitle>
           <CardDescription>
-            Tap on any poster to view in fullscreen
+            Tap on any photo to view in fullscreen {posters && posters.length > 0 && `(${posters.length} photos)`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {posters && posters.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {posters.map((poster) => (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {posters.map((poster, index) => (
                 <div 
                   key={poster.id} 
-                  className="cursor-pointer"
-                  onClick={() => poster.content_url && setFullscreenPoster(poster)}
+                  className="cursor-pointer group"
+                  onClick={() => {
+                    if (poster.content_url) {
+                      setCurrentPosterIndex(index);
+                      setFullscreenPoster(poster);
+                    }
+                  }}
                 >
-                  <h4 className="font-medium mb-2 text-sm">{poster.title}</h4>
-                  <AspectRatio ratio={3 / 4} className="bg-muted rounded-lg overflow-hidden hover:ring-2 hover:ring-primary transition-all">
+                  <AspectRatio ratio={1} className="bg-muted rounded-lg overflow-hidden group-hover:ring-2 group-hover:ring-primary transition-all">
                     {poster.content_url ? (
                       <img
                         src={poster.content_url}
                         alt={poster.title}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
                       <div className="flex items-center justify-center h-full">
-                        <Image className="h-12 w-12 text-muted-foreground" />
+                        <Image className="h-8 w-8 text-muted-foreground" />
                       </div>
                     )}
                   </AspectRatio>
+                  <p className="text-xs text-muted-foreground mt-1 truncate">{poster.title}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[1, 2].map((index) => (
-                <AspectRatio key={index} ratio={3 / 4} className="bg-muted rounded-lg overflow-hidden">
-                  <div className="flex items-center justify-center h-full bg-gradient-to-br from-accent/10 to-accent/5">
-                    <div className="text-center space-y-2">
-                      <Image className="h-12 w-12 mx-auto text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">
-                        No poster available
-                      </p>
-                    </div>
-                  </div>
-                </AspectRatio>
-              ))}
+            <div className="flex items-center justify-center h-40 bg-muted rounded-lg">
+              <div className="text-center space-y-2">
+                <Image className="h-12 w-12 mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  No photos available yet
+                </p>
+              </div>
             </div>
           )}
         </CardContent>
@@ -245,7 +291,7 @@ export function SurveyView() {
         </CardContent>
       </Card>
 
-      {/* Fullscreen Poster Dialog */}
+      {/* Fullscreen Photo Dialog with Navigation */}
       <Dialog open={!!fullscreenPoster} onOpenChange={(open) => !open && setFullscreenPoster(null)}>
         <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none">
           <button
@@ -254,13 +300,45 @@ export function SurveyView() {
           >
             <X className="h-6 w-6" />
           </button>
+          
+          {posters && posters.length > 1 && (
+            <>
+              <button
+                onClick={() => {
+                  const newIndex = currentPosterIndex === 0 ? posters.length - 1 : currentPosterIndex - 1;
+                  setCurrentPosterIndex(newIndex);
+                  setFullscreenPoster(posters[newIndex]);
+                }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-50 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <button
+                onClick={() => {
+                  const newIndex = currentPosterIndex === posters.length - 1 ? 0 : currentPosterIndex + 1;
+                  setCurrentPosterIndex(newIndex);
+                  setFullscreenPoster(posters[newIndex]);
+                }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-50 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </>
+          )}
+          
           {fullscreenPoster?.content_url && (
-            <div className="flex items-center justify-center w-full h-full p-4">
+            <div className="flex flex-col items-center justify-center w-full h-full p-4">
               <img
                 src={fullscreenPoster.content_url}
                 alt={fullscreenPoster.title}
-                className="max-w-full max-h-[90vh] object-contain"
+                className="max-w-full max-h-[85vh] object-contain"
               />
+              <div className="mt-2 text-center">
+                <p className="text-white text-sm">{fullscreenPoster.title}</p>
+                {posters && posters.length > 1 && (
+                  <p className="text-white/60 text-xs mt-1">{currentPosterIndex + 1} / {posters.length}</p>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
